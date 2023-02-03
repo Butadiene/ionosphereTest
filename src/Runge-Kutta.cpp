@@ -35,6 +35,8 @@ const int write_out_times = 10; // How many calculations do you write once (for 
 const double enable_lat_decrease = 1.0;//If this is 1, you think effect of decrease invalid latitude. if this is 0, no effect.
 ///// Test_parameter
 const double B_amplitude = 0.0;
+const double v_para_eV_switch_up = 1.1;
+const double v_para_eV_switch_down = 1.0;
 ////
 
 
@@ -55,8 +57,8 @@ double apply_field(double field, double v_para,double t){
     }
 }
 
-double apply_electric_acceleration(double v_para,double t){
-    return apply_field(electric_acceleration, v_para, t);
+double apply_electric_acceleration(double v_para,double t, double E_switch){
+    return apply_field(electric_acceleration*E_switch, v_para, t);    
 }
 
 double apply_magnetic_field(double v_para,double t){
@@ -79,8 +81,8 @@ double dv_para(double v_perp, double v_para, double t, double inval_lat) {
     return grad_field(inval_lat) * 0.5 * pow(v_perp, 2.0) + ion.charge * B_wave/ion.mass * v_perp;
 }
 
-double dv_perp(double v_perp, double v_para, double t, double inival_lat) {
-    double dv_perp_val = apply_electric_acceleration(v_para, t) - v_para / v_perp * dv_para(v_perp, v_para, t, inival_lat);
+double dv_perp(double v_perp, double v_para, double t, double inival_lat, double E_switch) {
+    double dv_perp_val = apply_electric_acceleration(v_para, t, E_switch) - v_para / v_perp * dv_para(v_perp, v_para, t, inival_lat);
     return dv_perp_val;
 }
 
@@ -88,6 +90,8 @@ int main() {
     double v_perp = init_v_perp;
     double v_para = init_v_para;
     double v_para_prev_x = init_v_para;
+    double v_para_prev_switch = init_v_para;
+    double E_switch = 1.0;
     double t = 0.0;
     double inval_lat = init_Inval_lat;
     int write_out_count = 0;
@@ -110,16 +114,16 @@ int main() {
     
     while (t < T && v_perp > 0.0) { // v_perp<0で止める
         //RK4
-        double k1_perp = dv_perp(v_perp, v_para, t, inval_lat);
-        double k1_para = dv_para(v_perp, v_para, t,inval_lat);
+        double k1_perp = dv_perp(v_perp, v_para, t, inval_lat, E_switch);
+        double k1_para = dv_para(v_perp, v_para, t, inval_lat);
 
-        double k2_perp = dv_perp(v_perp + 0.5 * dt * k1_perp, v_para + 0.5 * dt * k1_para, t+0.5*dt, inval_lat);
+        double k2_perp = dv_perp(v_perp + 0.5 * dt * k1_perp, v_para + 0.5 * dt * k1_para, t+0.5*dt, inval_lat ,E_switch);
         double k2_para = dv_para(v_perp + 0.5 * dt * k1_perp, v_para + 0.5 * dt * k1_para, t+0.5*dt,inval_lat);
 
-        double k3_perp = dv_perp(v_perp + 0.5 * dt * k2_perp, v_para + 0.5 * dt * k2_para, t+0.5*dt, inval_lat);
+        double k3_perp = dv_perp(v_perp + 0.5 * dt * k2_perp, v_para + 0.5 * dt * k2_para, t+0.5*dt, inval_lat ,E_switch);
         double k3_para = dv_para(v_perp + 0.5 * dt * k2_perp, v_para + 0.5 * dt * k2_para, t+0.5*dt, inval_lat);
 
-        double k4_perp = dv_perp(v_perp + dt * k3_perp, v_para + dt * k3_para, t+dt, inval_lat);
+        double k4_perp = dv_perp(v_perp + dt * k3_perp, v_para + dt * k3_para, t+dt, inval_lat ,E_switch);
         double k4_para = dv_para(v_perp + dt * k3_perp, v_para + dt * k3_para, t+dt, inval_lat);
         v_perp += dt / 6.0 * (k1_perp + 2.0 * k2_perp + 2.0 * k3_perp + k4_perp);
         v_para += dt / 6.0 * (k1_para + 2.0 * k2_para + 2.0 * k3_para + k4_para);
@@ -133,6 +137,17 @@ int main() {
         double k3_lambda = dlambda(inval_lat - 0.5 * dx_para * k2_lambda);
         double k4_lambda = dlambda(inval_lat - dx_para * k3_lambda);
         inval_lat -= dx_para / 6.0 * (k1_lambda + 2.0 * k2_lambda + 2.0 * k3_lambda + k4_lambda);
+
+        // Switch E
+        if(E_switch>0.0&&v_para-v_para_prev_switch>sqrt(v_para_eV_switch_up*(1.60218e-19)/ion.mass)){
+            v_para_prev_switch = v_para;
+            E_switch = -1.0;
+        }
+
+        if(E_switch<0.0&&v_para-v_para_prev_switch>sqrt(v_para_eV_switch_down*(1.60218e-19)/ion.mass)){
+            v_para_prev_switch = v_para;
+            E_switch = 1.0;
+        }
 
         //WriteOut section(Time plot)
         double pitch_angle = atan2(v_perp,v_para)*180/(3.1415926535);

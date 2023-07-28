@@ -35,8 +35,7 @@ if you want debug, you push f5 key.
 
 You can read markdown text with Ctrl+k→v
 
-pitch_angle...(test)
-Ctrl + Shift + P → Tasks: Run Task → run.py 
+(Test : Not dev finished) pitch_angle:Ctrl + Shift + P → Tasks: Run Task → run.py 
 
 ---
 
